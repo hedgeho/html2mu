@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+src/__init__.py
+src/escape.py
+src/md2mu.py
+src/micron.py
+src/underlined.py
+src/html2mu.egg-info/PKG-INFO
+src/html2mu.egg-info/SOURCES.txt
+src/html2mu.egg-info/dependency_links.txt
+src/html2mu.egg-info/requires.txt
+src/html2mu.egg-info/top_level.txt
