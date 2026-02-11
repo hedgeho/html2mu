@@ -57,7 +57,38 @@ def wrap_table(*, tag: Tag, text: str, **kwargs):
 
     return out
 
-def convert_html_to_markdown(html: str) -> str:
+def clean_lobsters_html(soup: BeautifulSoup) -> BeautifulSoup:
+    for elem in soup.find_all(class_='voters'):
+        elem.decompose()
+    for elem in soup.find_all(class_='archive-dropdown'):
+        elem.decompose()
+    for elem in soup.find_all(class_='archive_button'):
+        elem.decompose()
+    for elem in soup.find_all('img', class_='avatar'):
+        if elem.parent and elem.parent.name == 'a':
+            elem.parent.decompose()
+    for label in soup.find_all('label'):
+        if label.get('for', '').startswith('archive_'):
+            label.decompose()
+
+    for story in soup.find_all('li', class_='story'):
+        for link in story.find_all('a', recursive=True, href=True):
+            if link.get_text(strip=True).isdigit() and '/s/' in link['href']:
+                parent = link.parent
+                if parent and parent.name == 'li' and 'story' in parent.get('class', []):
+                    link.decompose()
+
+    for elem in soup.find_all('span', {'aria-hidden': 'true'}):
+        if elem.get_text(strip=True) == '|':
+            elem.decompose()
+
+    return soup
+
+def convert_html_to_markdown(html: str, clean_lobsters: bool = False) -> str:
+    if clean_lobsters:
+        soup = BeautifulSoup(html, 'html.parser')
+        soup = clean_lobsters_html(soup)
+        html = str(soup)
     return convert_to_markdown(html, custom_converters={'table': wrap_table})
 
 def convert_markdown_to_micron(md: str, current_url='') -> str:
@@ -67,18 +98,19 @@ def convert_markdown_to_micron(md: str, current_url='') -> str:
     result_mu = m2mu(md)
     return result_mu
 
-def convert_html_to_micron(html: str, current_url='') -> str:
-    result_md = convert_html_to_markdown(html)
+def convert_html_to_micron(html: str, current_url='', clean_lobsters: bool = False) -> str:
+    result_md = convert_html_to_markdown(html, clean_lobsters=clean_lobsters)
     result_mu = convert_markdown_to_micron(result_md, current_url=current_url)
     return result_mu
 
 def webpage_to_micron(url: str) -> str:
     url = unescape_url(url)
-    headers = {  # fake user agent not to get banned
+    headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     html = req.get(url, headers=headers).text
-    return convert_html_to_micron(html, current_url=url)
+    clean_lobsters = 'lobste.rs' in url
+    return convert_html_to_micron(html, current_url=url, clean_lobsters=clean_lobsters)
 
 if __name__ == '__main__':
     url = 'https://news.ycombinator.com/'
