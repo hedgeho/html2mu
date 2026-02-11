@@ -74,7 +74,10 @@ def convert_html_to_micron(html: str, current_url='') -> str:
 
 def webpage_to_micron(url: str) -> str:
     url = unescape_url(url)
-    html = req.get(url).text
+    headers = {  # fake user agent not to get banned
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    html = req.get(url, headers=headers).text
     return convert_html_to_micron(html, current_url=url)
 
 if __name__ == '__main__':
