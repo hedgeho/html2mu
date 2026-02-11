@@ -57,6 +57,67 @@ def wrap_table(*, tag: Tag, text: str, **kwargs):
 
     return out
 
+def extract_main_content(soup: BeautifulSoup) -> BeautifulSoup:
+    candidates = [
+        soup.find('article'),
+        soup.find('main'),
+        soup.find(role='main'),
+        soup.find(id='readme'),
+        soup.find(class_=lambda x: x and 'article' in ' '.join(x).lower()),
+        soup.find(class_=lambda x: x and 'post-content' in ' '.join(x).lower()),
+        soup.find(class_=lambda x: x and 'entry-content' in ' '.join(x).lower()),
+        soup.find(class_=lambda x: x and 'content-body' in ' '.join(x).lower()),
+    ]
+
+    for candidate in candidates:
+        if candidate and len(str(candidate)) > 500:
+            new_soup = BeautifulSoup('<html><body></body></html>', 'html.parser')
+            new_soup.body.append(candidate)
+            return new_soup
+
+    return soup
+
+def clean_general_html(soup: BeautifulSoup) -> BeautifulSoup:
+    for elem in soup.find_all(['script', 'style', 'noscript']):
+        elem.decompose()
+
+    for elem in soup.find_all('nav'):
+        elem.decompose()
+
+    for elem in soup.find_all('footer'):
+        elem.decompose()
+
+    for elem in soup.find_all('aside'):
+        elem.decompose()
+
+    for elem in soup.find_all('iframe'):
+        elem.decompose()
+
+    clutter_classes = [
+        'sidebar', 'social', 'share', 'sharing', 'cookie', 'banner',
+        'newsletter', 'subscribe', 'related', 'recommend', 'advertisement',
+        'ad-', 'ads-', 'promo', 'popup', 'modal', 'navigation', 'breadcrumb',
+        'menu', 'header', 'top-bar', 'comments-section'
+    ]
+
+    for pattern in clutter_classes:
+        for elem in soup.find_all(class_=lambda x: x and any(pattern in cls.lower() for cls in x)):
+            elem.decompose()
+
+    for elem in soup.find_all(id=lambda x: x and any(pattern in x.lower() for pattern in clutter_classes)):
+        elem.decompose()
+
+    for elem in soup.find_all('button'):
+        if 'share' in elem.get_text().lower() or 'subscribe' in elem.get_text().lower():
+            elem.decompose()
+
+    for elem in soup.find_all('form'):
+        text = elem.get_text().lower()
+        if any(word in text for word in ['newsletter', 'subscribe', 'email', 'sign up']):
+            elem.decompose()
+
+    return soup
+
 def clean_lobsters_html(soup: BeautifulSoup) -> BeautifulSoup:
     for elem in soup.find_all(class_='voters'):
         elem.decompose()
@@ -84,10 +145,15 @@ def clean_lobsters_html(soup: BeautifulSoup) -> BeautifulSoup:
 
     return soup
 
-def convert_html_to_markdown(html: str, clean_lobsters: bool = False) -> str:
-    if clean_lobsters:
+def convert_html_to_markdown(html: str, clean_lobsters: bool = False, clean_general: bool = True, extract_content: bool = True) -> str:
+    if clean_general or clean_lobsters or extract_content:
         soup = BeautifulSoup(html, 'html.parser')
-        soup = clean_lobsters_html(soup)
+        if extract_content:
+            soup = extract_main_content(soup)
+        if clean_general:
+            soup = clean_general_html(soup)
+        if clean_lobsters:
+            soup = clean_lobsters_html(soup)
         html = str(soup)
     return convert_to_markdown(html, custom_converters={'table': wrap_table})
 
@@ -98,19 +164,19 @@ def convert_markdown_to_micron(md: str, current_url='') -> str:
     result_mu = m2mu(md)
     return result_mu
 
-def convert_html_to_micron(html: str, current_url='', clean_lobsters: bool = False) -> str:
-    result_md = convert_html_to_markdown(html, clean_lobsters=clean_lobsters)
+def convert_html_to_micron(html: str, current_url='', clean_lobsters: bool = False, clean_general: bool = True, extract_content: bool = True) -> str:
+    result_md = convert_html_to_markdown(html, clean_lobsters=clean_lobsters, clean_general=clean_general, extract_content=extract_content)
     result_mu = convert_markdown_to_micron(result_md, current_url=current_url)
     return result_mu
 
-def webpage_to_micron(url: str) -> str:
+def webpage_to_micron(url: str, clean_general: bool = True, extract_content: bool = True) -> str:
     url = unescape_url(url)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     html = req.get(url, headers=headers).text
     clean_lobsters = 'lobste.rs' in url
-    return convert_html_to_micron(html, current_url=url, clean_lobsters=clean_lobsters)
+    return convert_html_to_micron(html, current_url=url, clean_lobsters=clean_lobsters, clean_general=clean_general, extract_content=extract_content)
 
 if __name__ == '__main__':
     url = 'https://news.ycombinator.com/'
